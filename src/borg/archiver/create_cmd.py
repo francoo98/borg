@@ -15,8 +15,8 @@ from ..archive import FilesystemObjectProcessors, MetadataCollector, ChunksProce
 from ..cache import Cache
 from ..constants import *  # NOQA
 from ..compress import CompressionSpec
-from ..helpers import ChunkerParams
-from ..helpers import NameSpec, FilesCacheMode
+from ..helpers import comment_validator, ChunkerParams
+from ..helpers import archivename_validator, FilesCacheMode
 from ..helpers import eval_escapes
 from ..helpers import timestamp, archive_ts_now
 from ..helpers import get_cache_dir, os_stat
@@ -28,6 +28,7 @@ from ..helpers import sig_int, ignore_sigint
 from ..helpers import iter_separated
 from ..manifest import Manifest
 from ..patterns import PatternMatcher
+from ..platform import is_win32
 from ..platform import get_flags
 from ..platform import uid2user, gid2group
 
@@ -68,7 +69,9 @@ class CreateMixIn:
                 if not dry_run:
                     try:
                         try:
-                            proc = subprocess.Popen(args.paths, stdout=subprocess.PIPE, preexec_fn=ignore_sigint)
+                            proc = subprocess.Popen(
+                                args.paths, stdout=subprocess.PIPE, preexec_fn=None if is_win32 else ignore_sigint
+                            )
                         except (FileNotFoundError, PermissionError) as e:
                             self.print_error("Failed to execute command: %s", e)
                             return self.exit_code
@@ -89,7 +92,9 @@ class CreateMixIn:
                 paths_sep = eval_escapes(args.paths_delimiter) if args.paths_delimiter is not None else "\n"
                 if args.paths_from_command:
                     try:
-                        proc = subprocess.Popen(args.paths, stdout=subprocess.PIPE, preexec_fn=ignore_sigint)
+                        proc = subprocess.Popen(
+                            args.paths, stdout=subprocess.PIPE, preexec_fn=None if is_win32 else ignore_sigint
+                        )
                     except (FileNotFoundError, PermissionError) as e:
                         self.print_error("Failed to execute command: %s", e)
                         return self.exit_code
@@ -118,7 +123,8 @@ class CreateMixIn:
                     if status == "C":
                         self.print_warning("%s: file changed while we backed it up", path)
                     self.print_file_status(status, path)
-                    fso.stats.files_stats[status] += 1
+                    if not dry_run and status is not None:
+                        fso.stats.files_stats[status] += 1
                 if args.paths_from_command:
                     rc = proc.wait()
                     if rc != 0:
@@ -142,7 +148,8 @@ class CreateMixIn:
                         else:
                             status = "-"
                         self.print_file_status(status, path)
-                        fso.stats.files_stats[status] += 1
+                        if not dry_run and status is not None:
+                            fso.stats.files_stats[status] += 1
                         continue
                     path = os.path.normpath(path)
                     parent_dir = os.path.dirname(path) or "."
@@ -442,8 +449,11 @@ class CreateMixIn:
                                         )
                                 self.print_file_status("x", path)
                             return
-                    if not recurse_excluded_dir and not dry_run:
-                        status = fso.process_dir_with_fd(path=path, fd=child_fd, st=st)
+                    if not recurse_excluded_dir:
+                        if not dry_run:
+                            status = fso.process_dir_with_fd(path=path, fd=child_fd, st=st)
+                        else:
+                            status = "-"
                     if recurse:
                         with backup_io("scandir"):
                             entries = helpers.scandir_inorder(path=path, fd=child_fd)
@@ -472,7 +482,7 @@ class CreateMixIn:
             self.print_warning("%s: file changed while we backed it up", path)
         if not recurse_excluded_dir:
             self.print_file_status(status, path)
-            if status is not None:
+            if not dry_run and status is not None:
                 fso.stats.files_stats[status] += 1
 
     def build_parser_create(self, subparsers, common_parser, mid_common_parser):
@@ -542,9 +552,9 @@ class CreateMixIn:
         is used to determine changed files quickly uses absolute filenames.
         If this is not possible, consider creating a bind mount to a stable location.
 
-        The ``--progress`` option shows (from left to right) Original, Compressed and Deduplicated
-        (O, C and D, respectively), then the Number of files (N) processed so far, followed by
-        the currently processed path.
+        The ``--progress`` option shows (from left to right) Original and (uncompressed)
+        deduplicated size (O and U respectively), then the Number of files (N) processed so far,
+        followed by the currently processed path.
 
         When using ``--stats``, you will get some statistics about how much data was
         added - the "This Archive" deduplicated size there is most interesting as that is
@@ -734,7 +744,7 @@ class CreateMixIn:
         subparser.add_argument(
             "--paths-from-stdin",
             action="store_true",
-            help="read DELIM-separated list of paths to backup from stdin. Will not " "recurse into directories.",
+            help="read DELIM-separated list of paths to back up from stdin. Will not " "recurse into directories.",
         )
         subparser.add_argument(
             "--paths-from-command",
@@ -811,7 +821,12 @@ class CreateMixIn:
 
         archive_group = subparser.add_argument_group("Archive options")
         archive_group.add_argument(
-            "--comment", dest="comment", metavar="COMMENT", default="", help="add a comment text to the archive"
+            "--comment",
+            metavar="COMMENT",
+            dest="comment",
+            type=comment_validator,
+            default="",
+            help="add a comment text to the archive",
         )
         archive_group.add_argument(
             "--timestamp",
@@ -851,5 +866,5 @@ class CreateMixIn:
             help="select compression algorithm, see the output of the " '"borg help compression" command for details.',
         )
 
-        subparser.add_argument("name", metavar="NAME", type=NameSpec, help="specify the archive name")
+        subparser.add_argument("name", metavar="NAME", type=archivename_validator, help="specify the archive name")
         subparser.add_argument("paths", metavar="PATH", nargs="*", type=str, action="extend", help="paths to archive")

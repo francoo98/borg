@@ -7,6 +7,7 @@ import unittest
 
 from ...constants import *  # NOQA
 from ...helpers.time import parse_timestamp
+from ..platform import is_win32
 from . import ArchiverTestCaseBase, RemoteArchiverTestCaseBase, ArchiverTestCaseBinaryBase, RK_ENCRYPTION, BORG_EXES
 
 
@@ -81,6 +82,7 @@ class ArchiverTestCase(ArchiverTestCaseBase):
         for got_archive, expected_archive in zip(got["archives"], expected["archives"]):
             del got_archive["id"]
             del expected_archive["id"]
+            del expected_archive["barchive"]
             # timestamps:
             # borg 1.2 transformed to local time and had microseconds = 0, no tzoffset
             # borg 2 uses an utc timestamp, with microseconds and with tzoffset
@@ -150,6 +152,11 @@ class ArchiverTestCase(ArchiverTestCaseBase):
                     # Note: size == 0 for all items without a size or chunks list (like e.g. directories)
                     # Note: healthy == True indicates the *absence* of the additional chunks_healthy list
                 del g["hlid"]
+
+                if e["type"] == "b" and is_win32:
+                    # The S_IFBLK macro is broken on MINGW
+                    del e["type"], g["type"]
+                    del e["mode"], g["mode"]
                 assert g == e
 
             if name == "archive1":
@@ -249,7 +256,9 @@ class ArchiverTestCase(ArchiverTestCaseBase):
                         assert item.group in ("root", "wheel")
                         assert "hlid" not in item
                     elif item.path.endswith("bdev_12_34"):
-                        assert stat.S_ISBLK(item.mode)
+                        if not is_win32:
+                            # The S_IFBLK macro is broken on MINGW
+                            assert stat.S_ISBLK(item.mode)
                         # looks like we can't use os.major/minor with data coming from another platform,
                         # thus we only do a rather rough check here:
                         assert "rdev" in item and item.rdev != 0

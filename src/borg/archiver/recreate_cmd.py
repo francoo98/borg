@@ -5,7 +5,7 @@ from ._common import build_matcher
 from ..archive import ArchiveRecreater
 from ..constants import *  # NOQA
 from ..compress import CompressionSpec
-from ..helpers import archivename_validator, ChunkerParams
+from ..helpers import archivename_validator, comment_validator, ChunkerParams
 from ..helpers import timestamp
 from ..manifest import Manifest
 
@@ -89,8 +89,8 @@ class RecreateMixIn:
         used to have upgraded Borg 0.xx archives deduplicate with Borg 1.x archives.
 
         **USE WITH CAUTION.**
-        Depending on the PATHs and patterns given, recreate can be used to permanently
-        delete files from archives.
+        Depending on the PATHs and patterns given, recreate can be used to
+        delete files from archives permanently.
         When in doubt, use ``--dry-run --verbose --list`` to see how patterns/PATHS are
         interpreted. See :ref:`list_item_flags` in ``borg create`` for details.
 
@@ -147,7 +147,7 @@ class RecreateMixIn:
             dest="target",
             metavar="TARGET",
             default=None,
-            type=archivename_validator(),
+            type=archivename_validator,
             help="create a new archive with the name ARCHIVE, do not replace existing archive "
             "(only applies for a single archive)",
         )
@@ -161,7 +161,12 @@ class RecreateMixIn:
             help="write checkpoint every SECONDS seconds (Default: 1800)",
         )
         archive_group.add_argument(
-            "--comment", dest="comment", metavar="COMMENT", default=None, help="add a comment text to the archive"
+            "--comment",
+            metavar="COMMENT",
+            dest="comment",
+            type=comment_validator,
+            default=None,
+            help="add a comment text to the archive",
         )
         archive_group.add_argument(
             "--timestamp",
@@ -194,7 +199,7 @@ class RecreateMixIn:
             "`if-different`: recompress if current compression is with a different "
             "compression algorithm or different level; "
             "`always`: recompress unconditionally; and "
-            "`never`: do not recompress (use this option to explicitly prevent "
+            "`never`: do not recompress (use this option explicitly to prevent "
             "recompression). "
             "If no MODE is given, `if-different` will be used. "
             'Not passing --recompress is equivalent to "--recompress never".',

@@ -15,8 +15,7 @@ from ..helpers import dash_open
 from ..helpers import msgpack
 from ..helpers import create_filter_process
 from ..helpers import ChunkIteratorFileWrapper
-from ..helpers import ChunkerParams
-from ..helpers import NameSpec
+from ..helpers import archivename_validator, comment_validator, ChunkerParams
 from ..helpers import remove_surrogates
 from ..helpers import timestamp, archive_ts_now
 from ..helpers import basic_json_data, json_print
@@ -404,7 +403,7 @@ class TarMixIn:
             choices=("BORG", "PAX", "GNU"),
             help="select tar format: BORG, PAX or GNU",
         )
-        subparser.add_argument("name", metavar="NAME", type=NameSpec, help="specify the archive name")
+        subparser.add_argument("name", metavar="NAME", type=archivename_validator, help="specify the archive name")
         subparser.add_argument("tarfile", metavar="FILE", help='output tar file. "-" to write to stdout instead.')
         subparser.add_argument(
             "paths", metavar="PATH", nargs="*", type=str, help="paths to extract; patterns are supported"
@@ -491,7 +490,12 @@ class TarMixIn:
 
         archive_group = subparser.add_argument_group("Archive options")
         archive_group.add_argument(
-            "--comment", dest="comment", metavar="COMMENT", default="", help="add a comment text to the archive"
+            "--comment",
+            metavar="COMMENT",
+            dest="comment",
+            type=comment_validator,
+            default="",
+            help="add a comment text to the archive",
         )
         archive_group.add_argument(
             "--timestamp",
@@ -531,5 +535,5 @@ class TarMixIn:
             help="select compression algorithm, see the output of the " '"borg help compression" command for details.',
         )
 
-        subparser.add_argument("name", metavar="NAME", type=NameSpec, help="specify the archive name")
+        subparser.add_argument("name", metavar="NAME", type=archivename_validator, help="specify the archive name")
         subparser.add_argument("tarfile", metavar="TARFILE", help='input tar file. "-" to read from stdin instead.')
